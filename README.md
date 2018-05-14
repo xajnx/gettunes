@@ -1,8 +1,9 @@
 # gettunes
 Tk front-end for the python script youtube-dl
 
--Requires youtube-dl (get here https://github.com/rg3/youtube-dl)
-  |_ requires ffmpeg to convert to mp3
+*Requires youtube-dl (get here https://github.com/rg3/youtube-dl)
+*requires ffmpeg to convert to mp3
+
 
 v0.1 - Basic shell program. insert link, get mp3
        - This version doesn't print the YT-dl progess hooks in real-time.
@@ -21,7 +22,7 @@ future versions-
  - print youtube-dl progress hooks in real time
 
 **Install**
-- if you don't have youtube-dl installed: $>pip3 install youtube-dl 
-- if you don't have ffmpeg: $> sudo apt-get install ffmpeg
+*if you don't have youtube-dl installed: `$>pip3 install youtube-dl` 
+*if you don't have ffmpeg: `$> sudo apt-get install ffmpeg`
 put script into your ~/Music directory
 create .desktop entry to access it, or run directly from the shell.
