@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+
+from tkinter import *
+import os
+import youtube_dl
+#import unicode_literals
+
+srcdir = os.environ['HOME']
+mdir = []
+
+def write(statmsg):
+	stext.config(state=NORMAL)
+	stext.insert("end", statmsg + "\n")
+	stext.see("end")
+	stext.config(state=DISABLED)
+	
+class MyLogger(object):
+	def debug(self, msg):
+		write(msg)
+	
+	def warning(self, msg):
+		write(msg)
+		
+		
+	def error(self, msg):
+		write(msg)
+		
+def f_hook(d):
+	status = d['status']
+	if status == 'finished':
+		write("Download complete..Converting to Mp3")
+	  
+
+def gettunes(): 
+	glink = [gentry.get()]
+	ydl_opts = {
+		'format': 'bestaudio/best',
+		'postprocessors': [{
+			'key': 'FFmpegExtractAudio',
+			'preferredcodec': 'mp3',
+			'preferredquality': '192',
+		}],
+		'logger': MyLogger(),
+		'progress_hooks': [f_hook],
+	}
+	
+	ydl = youtube_dl.YoutubeDL(ydl_opts)
+	ydl.download(glink)
+				
+	
+gmain = Tk()
+gmain.title("GetTunes")
+
+tlabel = Label(gmain, text="GetTunes - YouTube to Mp3 converter")
+tlabel.pack(fill=X, padx=20, pady=10)
+
+glabel = Label(gmain, text="Enter YouTube Link: ")
+glabel.pack(side=TOP, padx=1)
+
+gentry = Entry(gmain, bd=3) 
+gentry.pack(side=TOP, fill=X, padx=3)
+glink = gentry.get()
+
+gbtn = Button(gmain, text="Get Mp3", command=gettunes)
+gbtn.pack(side=TOP, fill=X, padx=3, pady=2)
+
+qbtn = Button(gmain, text="Quit",  command=quit)
+qbtn.pack(side=BOTTOM, fill=X, padx=3, pady=2)
+
+stext = Text(gmain, width=55, height=22)
+stext.pack(side=BOTTOM, padx=5, pady=5)
+
+
+
+gmain.mainloop()
+
+
+
+
