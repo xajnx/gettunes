@@ -1,31 +1,47 @@
-# gettunes
-Tk front-end for the python script youtube-dl
-
-Requires youtube-dl (get here https://github.com/rg3/youtube-dl)
-requires ffmpeg to convert to mp3
 
 
-v0.1 - Basic shell program. insert link, get mp3
-       - This version doesn't print the YT-dl progess hooks in real-time.
-         when you click 'Go' the program initalizes but you will not see 
-         output until YT-dl has finished it's thing. I'm not sure how to catch
-         the hooks yet, but when I do it will be in the next release.
-       - Since there is no menu yet, it's best to put the script in your Music
-         folder and create a .desktop entry to access it. Future versions will
-         allow user to choose where files are saved.
+# GetTunes
 
-future versions-
- - radiobuttons to access more of the youtube-dl options
- - search function
- - edit name of file
- - file menu to give option to pick where file is saved
- - print youtube-dl progress hooks in real time
+GetTunes is a modern Tkinter front-end for downloading and converting YouTube videos to MP3 using [yt-dlp](https://github.com/yt-dlp/yt-dlp) and ffmpeg.
 
-**Install**
+## Features
 
-if you don't have youtube-dl installed: `$>pip3 install youtube-dl`
+- Simple, intuitive GUI (Tkinter)
+- Paste a YouTube link and download as MP3
+- Choose output directory
+- Real-time status and error messages
+- Uses yt-dlp (actively maintained)
+- Requires ffmpeg for conversion
 
-if you don't have ffmpeg: `$> sudo apt-get install ffmpeg`
+## Installation
 
-1. put script into your ~/Music directory
-2. create .desktop entry to access it, or run directly from the shell.
+1. Install dependencies:
+
+  ```bash
+  pip install -r requirements.txt
+  sudo apt-get install ffmpeg
+  ```
+
+1. Run the script:
+
+  ```bash
+  python gettunes
+  ```
+
+## Usage
+
+- Paste a YouTube link in the field
+- (Optional) Choose where to save the MP3
+- Click "Get Mp3" to download and convert
+
+## License
+
+This project is licensed under the GNU GPL v3. See LICENSE for details.
+
+## Future Improvements
+
+- More yt-dlp options (quality, format)
+- Search YouTube from the app
+- Edit output filename
+- Progress bar
+- Dark mode/theme support

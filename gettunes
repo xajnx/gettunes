@@ -1,78 +1,281 @@
-#!/usr/bin/env python3
-
-from tkinter import *
-import os
-import youtube_dl
-#import unicode_literals
-
 srcdir = os.environ['HOME']
-mdir = []
-
 def write(statmsg):
-	stext.config(state=NORMAL)
-	stext.insert("end", statmsg + "\n")
-	stext.see("end")
-	stext.config(state=DISABLED)
-	
-class MyLogger(object):
-	def debug(self, msg):
-		write(msg)
-	
-	def warning(self, msg):
-		write(msg)
-		
-		
-	def error(self, msg):
-		write(msg)
-		
-def f_hook(d):
-	status = d['status']
-	if status == 'finished':
-		write("Download complete..Converting to Mp3")
-	  
-
-def gettunes(): 
-	glink = [gentry.get()]
-	ydl_opts = {
-		'format': 'bestaudio/best',
-		'postprocessors': [{
-			'key': 'FFmpegExtractAudio',
-			'preferredcodec': 'mp3',
-			'preferredquality': '192',
-		}],
-		'logger': MyLogger(),
-		'progress_hooks': [f_hook],
-	}
-	
-	ydl = youtube_dl.YoutubeDL(ydl_opts)
-	ydl.download(glink)
-				
-	
-gmain = Tk()
-gmain.title("GetTunes")
-
-tlabel = Label(gmain, text="GetTunes - YouTube to Mp3 converter")
-tlabel.pack(fill=X, padx=20, pady=10)
-
 glabel = Label(gmain, text="Enter YouTube Link: ")
-glabel.pack(side=TOP, padx=1)
-
 gentry = Entry(gmain, bd=3) 
-gentry.pack(side=TOP, fill=X, padx=3)
-glink = gentry.get()
-
 gbtn = Button(gmain, text="Get Mp3", command=gettunes)
-gbtn.pack(side=TOP, fill=X, padx=3, pady=2)
-
-qbtn = Button(gmain, text="Quit",  command=quit)
-qbtn.pack(side=BOTTOM, fill=X, padx=3, pady=2)
-
-stext = Text(gmain, width=55, height=22)
-stext.pack(side=BOTTOM, padx=5, pady=5)
-
-
-
+	tk.Label(search_frame, text="Search YouTube:", font=("Arial", 12)).pack(side=tk.LEFT)
+	self.search_entry = tk.Entry(search_frame, font=("Arial", 12), width=40)
+	self.search_entry.pack(side=tk.LEFT, padx=5)
+	tk.Button(search_frame, text="Search", command=self.start_search).pack(side=tk.LEFT, padx=5)
+def main():
 gmain.mainloop()
+
+# Modern GetTunesApp and main function only
+import os
+import tkinter as tk
+from tkinter import filedialog, messagebox
+import threading
+from yt_dlp import YoutubeDL
+import subprocess
+
+class GetTunesApp:
+	def __init__(self, root):
+		self.root = root
+		self.root.title("GetTunes - YouTube to Mp3 Converter")
+		self.root.geometry("650x500")
+		self.root.resizable(False, False)
+
+		self.output_dir = os.path.expanduser("~/Music")
+		self.search_results = []
+		self.download_thread = None
+		self.cancel_download = False
+
+		self.create_widgets()
+
+	def create_widgets(self):
+		title = tk.Label(self.root, text="GetTunes - YouTube Downloader & Player", font=("Arial", 16, "bold"))
+		title.pack(pady=10)
+
+		# Search bar
+		search_frame = tk.Frame(self.root)
+		search_frame.pack(fill=tk.X, padx=20)
+		tk.Label(search_frame, text="Search YouTube:", font=("Arial", 12)).pack(side=tk.LEFT)
+		self.search_entry = tk.Entry(search_frame, font=("Arial", 12), width=40)
+		self.search_entry.pack(side=tk.LEFT, padx=5)
+		tk.Button(search_frame, text="Search", command=self.start_search).pack(side=tk.LEFT, padx=5)
+
+		# Results field
+		results_frame = tk.Frame(self.root)
+		results_frame.pack(fill=tk.BOTH, padx=20, pady=5, expand=True)
+		self.results_listbox = tk.Listbox(results_frame, font=("Arial", 11), height=6, width=80)
+		self.results_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+		self.results_listbox.bind('<<ListboxSelect>>', self.on_result_select)
+		scrollbar = tk.Scrollbar(results_frame, orient="vertical", command=self.results_listbox.yview)
+		scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+		self.results_listbox.config(yscrollcommand=scrollbar.set)
+
+		# Output directory
+		dir_frame = tk.Frame(self.root)
+		dir_frame.pack(fill=tk.X, padx=20, pady=5)
+		tk.Label(dir_frame, text="Save to:", font=("Arial", 12)).pack(side=tk.LEFT)
+		self.dir_label = tk.Label(dir_frame, text=self.output_dir, font=("Arial", 10), fg="blue")
+		self.dir_label.pack(side=tk.LEFT, padx=5)
+		tk.Button(dir_frame, text="Browse", command=self.choose_dir).pack(side=tk.LEFT, padx=5)
+
+		# Action buttons
+		btn_frame = tk.Frame(self.root)
+		btn_frame.pack(fill=tk.X, padx=20, pady=5)
+		self.listen_btn = tk.Button(btn_frame, text="Listen To Audio", font=("Arial", 12), command=self.listen_audio, state=tk.DISABLED)
+		self.listen_btn.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
+		self.download_audio_btn = tk.Button(btn_frame, text="Download Audio", font=("Arial", 12), command=self.download_audio, state=tk.DISABLED)
+		self.download_audio_btn.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
+		self.download_video_btn = tk.Button(btn_frame, text="Download Video", font=("Arial", 12), command=self.download_video, state=tk.DISABLED)
+		self.download_video_btn.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
+		self.cancel_btn = tk.Button(btn_frame, text="Cancel", font=("Arial", 12), command=self.cancel_current, state=tk.DISABLED)
+		self.cancel_btn.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
+		tk.Button(btn_frame, text="Close", font=("Arial", 12), command=self.root.quit).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
+
+		# Status field
+		self.status_text = tk.Text(self.root, width=80, height=8, state=tk.DISABLED, font=("Consolas", 10))
+		self.status_text.pack(padx=20, pady=10)
+
+	def choose_dir(self):
+		dir_selected = filedialog.askdirectory(initialdir=self.output_dir)
+		if dir_selected:
+			self.output_dir = dir_selected
+			self.dir_label.config(text=self.output_dir)
+
+	def write_status(self, msg):
+		self.status_text.config(state=tk.NORMAL)
+		self.status_text.insert(tk.END, msg + "\n")
+		self.status_text.see(tk.END)
+		self.status_text.config(state=tk.DISABLED)
+
+	def start_search(self):
+		query = self.search_entry.get().strip()
+		if not query:
+			messagebox.showerror("Error", "Please enter a search term.")
+			return
+		self.write_status(f"Searching YouTube for: {query}")
+		threading.Thread(target=self.search_youtube, args=(query,), daemon=True).start()
+
+	def search_youtube(self, query):
+		ydl_opts = {
+			'quiet': True,
+			'extract_flat': True,
+			'skip_download': True,
+		}
+		try:
+			with YoutubeDL(ydl_opts) as ydl:
+				info = ydl.extract_info(f"ytsearch5:{query}", download=False)
+			self.search_results = info['entries']
+			self.results_listbox.delete(0, tk.END)
+			for i, entry in enumerate(self.search_results):
+				title = entry.get('title', 'Unknown')
+				channel = entry.get('uploader', 'Unknown')
+				duration = entry.get('duration', 0)
+				views = entry.get('view_count', 0)
+				self.results_listbox.insert(tk.END, f"{i+1}. {title} | {channel} | {duration}s | {views} views")
+			self.write_status("Search complete. Select a result to enable actions.")
+		except Exception as e:
+			self.write_status(f"Search error: {str(e)}")
+
+	def on_result_select(self, event):
+		selection = self.results_listbox.curselection()
+		if selection:
+			self.listen_btn.config(state=tk.NORMAL)
+			self.download_audio_btn.config(state=tk.NORMAL)
+			self.download_video_btn.config(state=tk.NORMAL)
+		else:
+			self.listen_btn.config(state=tk.DISABLED)
+			self.download_audio_btn.config(state=tk.DISABLED)
+			self.download_video_btn.config(state=tk.DISABLED)
+
+	def get_selected_url(self):
+		selection = self.results_listbox.curselection()
+		if selection:
+			idx = selection[0]
+			return self.search_results[idx]['url']
+		return None
+
+	def listen_audio(self):
+		url = self.get_selected_url()
+		if not url:
+			return
+		self.write_status("Streaming audio...")
+		threading.Thread(target=self.stream_audio, args=(url,), daemon=True).start()
+
+	def stream_audio(self, url):
+		# Use ffplay to stream audio
+		try:
+			cmd = ["ffplay", "-nodisp", "-autoexit", url]
+			subprocess.run(cmd)
+			self.write_status("Audio playback finished.")
+		except Exception as e:
+			self.write_status(f"Audio playback error: {str(e)}")
+
+	def download_audio(self):
+		url = self.get_selected_url()
+		if not url:
+			return
+		self.write_status("Starting audio download...")
+		self.cancel_download = False
+		self.cancel_btn.config(state=tk.NORMAL)
+		self.download_thread = threading.Thread(target=self.download_mp3, args=(url,), daemon=True)
+		self.download_thread.start()
+
+	def download_video(self):
+		url = self.get_selected_url()
+		if not url:
+			return
+		self.write_status("Starting video download...")
+		self.cancel_download = False
+		self.cancel_btn.config(state=tk.NORMAL)
+		self.download_thread = threading.Thread(target=self.download_mp4, args=(url,), daemon=True)
+		self.download_thread.start()
+
+	def cancel_current(self):
+		self.cancel_download = True
+		self.write_status("Cancelling download...")
+
+	def download_mp3(self, url):
+		import time
+		time.sleep(1.5)
+
+		def status_callback(msg):
+			self.write_status(msg)
+
+		class Logger:
+			def __init__(self, callback):
+				self.callback = callback
+			def debug(self, msg):
+				pass
+			def warning(self, msg):
+				self.callback("Warning: " + msg)
+			def error(self, msg):
+				self.callback("Error: " + msg)
+
+		def hook(d):
+			if self.cancel_download:
+				raise Exception("Download cancelled by user.")
+			if d['status'] == 'downloading':
+				percent = d.get('downloaded_bytes', 0) / max(d.get('total_bytes', 1), 1) * 100
+				self.write_status(f"Downloading: {percent:.2f}%")
+			elif d['status'] == 'finished':
+				self.write_status("Download complete. Converting to Mp3...")
+
+		ydl_opts = {
+			'format': 'bestaudio/best',
+			'outtmpl': os.path.join(self.output_dir, '%(title)s.%(ext)s'),
+			'postprocessors': [{
+				'key': 'FFmpegExtractAudio',
+				'preferredcodec': 'mp3',
+				'preferredquality': '192',
+			}],
+			'logger': Logger(status_callback),
+			'progress_hooks': [hook],
+			'quiet': True,
+		}
+		try:
+			with YoutubeDL(ydl_opts) as ydl:
+				ydl.download([url])
+			self.write_status("Done! Mp3 saved to: " + self.output_dir)
+		except Exception as e:
+			self.write_status(f"Error: {str(e)}")
+			messagebox.showerror("Download Error", str(e))
+		finally:
+			self.cancel_btn.config(state=tk.DISABLED)
+
+	def download_mp4(self, url):
+		import time
+		time.sleep(1.5)
+
+		def status_callback(msg):
+			self.write_status(msg)
+
+		class Logger:
+			def __init__(self, callback):
+				self.callback = callback
+			def debug(self, msg):
+				pass
+			def warning(self, msg):
+				self.callback("Warning: " + msg)
+			def error(self, msg):
+				self.callback("Error: " + msg)
+
+		def hook(d):
+			if self.cancel_download:
+				raise Exception("Download cancelled by user.")
+			if d['status'] == 'downloading':
+				percent = d.get('downloaded_bytes', 0) / max(d.get('total_bytes', 1), 1) * 100
+				self.write_status(f"Downloading: {percent:.2f}%")
+			elif d['status'] == 'finished':
+				self.write_status("Download complete.")
+
+		ydl_opts = {
+			'format': 'bestvideo+bestaudio/best',
+			'outtmpl': os.path.join(self.output_dir, '%(title)s.%(ext)s'),
+			'logger': Logger(status_callback),
+			'progress_hooks': [hook],
+			'quiet': True,
+		}
+		try:
+			with YoutubeDL(ydl_opts) as ydl:
+				ydl.download([url])
+			self.write_status("Done! Video saved to: " + self.output_dir)
+		except Exception as e:
+			self.write_status(f"Error: {str(e)}")
+			messagebox.showerror("Download Error", str(e))
+		finally:
+			self.cancel_btn.config(state=tk.DISABLED)
+
+def main():
+	root = tk.Tk()
+	app = GetTunesApp(root)
+	root.mainloop()
+
+if __name__ == "__main__":
+	main()
 
 
 
