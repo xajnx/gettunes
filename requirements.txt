@@ -1,1 +1,6 @@
+
 yt-dlp
+PyQt6
+# System dependencies (not installed by pip):
+# ffmpeg
+# ffplay

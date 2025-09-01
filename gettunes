@@ -1,269 +1,301 @@
 import os
-import tkinter as tk
-from tkinter import filedialog, messagebox
+import sys
 import threading
-from yt_dlp import YoutubeDL
 import subprocess
+from yt_dlp import YoutubeDL
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
+    QListWidget, QListWidgetItem, QFileDialog, QTextEdit
+)
+from PyQt6.QtCore import Qt, pyqtSignal
 
-class GetTunesApp:
-	def __init__(self, root):
-		self.root = root
-		self.root.title("GetTunes - YouTube to Mp3 Converter")
-		self.root.geometry("650x500")
-		self.root.resizable(False, False)
+class GetTunesApp(QWidget):
+    status_signal = pyqtSignal(str)
+    search_results_signal = pyqtSignal(list)
+    cancel_enable_signal = pyqtSignal(bool)
 
-		self.output_dir = os.path.expanduser("~/Music")
-		self.search_results = []
-		self.download_thread = None
-		self.cancel_download = False
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("GetTunes - YouTube to Mp3 Converter")
+        self.setGeometry(100, 100, 700, 520)
+        self.output_dir = os.path.expanduser("~/Music")
+        self.search_results = []
+        self.download_thread = None
+        self.cancel_download = False
+        self.audio_proc = None
 
-		self.create_widgets()
+        self.init_ui()
+        self.status_signal.connect(self.write_status)
+        self.search_results_signal.connect(self.update_search_results)
+        self.cancel_enable_signal.connect(self.set_cancel_enabled)
 
-	def create_widgets(self):
-		title = tk.Label(self.root, text="GetTunes - YouTube Downloader & Player", font=("Arial", 16, "bold"))
-		title.pack(pady=10)
+    def init_ui(self):
+        main_layout = QVBoxLayout()
 
-		# Search bar
-		search_frame = tk.Frame(self.root)
-		search_frame.pack(fill=tk.X, padx=20)
-		tk.Label(search_frame, text="Search YouTube:", font=("Arial", 12)).pack(side=tk.LEFT)
-		self.search_entry = tk.Entry(search_frame, font=("Arial", 12), width=40)
-		self.search_entry.pack(side=tk.LEFT, padx=5)
-		tk.Button(search_frame, text="Search", command=self.start_search).pack(side=tk.LEFT, padx=5)
+        title = QLabel("GetTunes - YouTube Downloader & Player")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet("font-size: 20px; font-weight: bold;")
+        main_layout.addWidget(title)
 
-		# Results field
-		results_frame = tk.Frame(self.root)
-		results_frame.pack(fill=tk.BOTH, padx=20, pady=5, expand=True)
-		self.results_listbox = tk.Listbox(results_frame, font=("Arial", 11), height=6, width=80)
-		self.results_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-		self.results_listbox.bind('<<ListboxSelect>>', self.on_result_select)
-		scrollbar = tk.Scrollbar(results_frame, orient="vertical", command=self.results_listbox.yview)
-		scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-		self.results_listbox.config(yscrollcommand=scrollbar.set)
+        # Search bar
+        search_layout = QHBoxLayout()
+        search_label = QLabel("Search YouTube:")
+        self.search_entry = QLineEdit()
+        self.search_entry.setPlaceholderText("Enter search term...")
+        self.search_entry.setMinimumWidth(350)
+        search_btn = QPushButton("Search")
+        search_btn.clicked.connect(self.start_search)
+        search_layout.addWidget(search_label)
+        search_layout.addWidget(self.search_entry)
+        search_layout.addWidget(search_btn)
+        main_layout.addLayout(search_layout)
 
-		# Output directory
-		dir_frame = tk.Frame(self.root)
-		dir_frame.pack(fill=tk.X, padx=20, pady=5)
-		tk.Label(dir_frame, text="Save to:", font=("Arial", 12)).pack(side=tk.LEFT)
-		self.dir_label = tk.Label(dir_frame, text=self.output_dir, font=("Arial", 10), fg="blue")
-		self.dir_label.pack(side=tk.LEFT, padx=5)
-		tk.Button(dir_frame, text="Browse", command=self.choose_dir).pack(side=tk.LEFT, padx=5)
+        # Results field
+        self.results_listbox = QListWidget()
+        self.results_listbox.setMinimumHeight(120)
+        self.results_listbox.itemSelectionChanged.connect(self.on_result_select)
+        main_layout.addWidget(self.results_listbox)
 
-		# Action buttons
-		btn_frame = tk.Frame(self.root)
-		btn_frame.pack(fill=tk.X, padx=20, pady=5)
-		self.listen_btn = tk.Button(btn_frame, text="Listen To Audio", font=("Arial", 12), command=self.listen_audio, state=tk.DISABLED)
-		self.listen_btn.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
-		self.download_audio_btn = tk.Button(btn_frame, text="Download Audio", font=("Arial", 12), command=self.download_audio, state=tk.DISABLED)
-		self.download_audio_btn.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
-		self.download_video_btn = tk.Button(btn_frame, text="Download Video", font=("Arial", 12), command=self.download_video, state=tk.DISABLED)
-		self.download_video_btn.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
-		self.cancel_btn = tk.Button(btn_frame, text="Cancel", font=("Arial", 12), command=self.cancel_current, state=tk.DISABLED)
-		self.cancel_btn.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
-		tk.Button(btn_frame, text="Close", font=("Arial", 12), command=self.root.quit).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
+        # Output directory
+        dir_layout = QHBoxLayout()
+        dir_label = QLabel("Save to:")
+        self.dir_label = QLabel(self.output_dir)
+        browse_btn = QPushButton("Browse")
+        browse_btn.clicked.connect(self.choose_dir)
+        dir_layout.addWidget(dir_label)
+        dir_layout.addWidget(self.dir_label)
+        dir_layout.addWidget(browse_btn)
+        main_layout.addLayout(dir_layout)
 
-		# Status field
-		self.status_text = tk.Text(self.root, width=80, height=8, state=tk.DISABLED, font=("Consolas", 10))
-		self.status_text.pack(padx=20, pady=10)
+        # Action buttons
+        btn_layout = QHBoxLayout()
+        self.listen_btn = QPushButton("Listen To Audio")
+        self.listen_btn.setEnabled(False)
+        self.listen_btn.clicked.connect(self.listen_audio)
+        self.stop_btn = QPushButton("Stop Playing")
+        self.stop_btn.setEnabled(False)
+        self.stop_btn.clicked.connect(self.stop_audio)
+        self.download_audio_btn = QPushButton("Download Audio")
+        self.download_audio_btn.setEnabled(False)
+        self.download_audio_btn.clicked.connect(self.download_audio)
+        self.download_video_btn = QPushButton("Download Video")
+        self.download_video_btn.setEnabled(False)
+        self.download_video_btn.clicked.connect(self.download_video)
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setEnabled(False)
+        self.cancel_btn.clicked.connect(self.cancel_current)
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.close)
+        btn_layout.addWidget(self.listen_btn)
+        btn_layout.addWidget(self.stop_btn)
+        btn_layout.addWidget(self.download_audio_btn)
+        btn_layout.addWidget(self.download_video_btn)
+        btn_layout.addWidget(self.cancel_btn)
+        btn_layout.addWidget(close_btn)
+        main_layout.addLayout(btn_layout)
 
-	def choose_dir(self):
-		dir_selected = filedialog.askdirectory(initialdir=self.output_dir)
-		if dir_selected:
-			self.output_dir = dir_selected
-			self.dir_label.config(text=self.output_dir)
+        # Status field
+        self.status_text = QTextEdit()
+        self.status_text.setReadOnly(True)
+        self.status_text.setMinimumHeight(100)
+        main_layout.addWidget(self.status_text)
 
-	def write_status(self, msg):
-		self.status_text.config(state=tk.NORMAL)
-		self.status_text.insert(tk.END, msg + "\n")
-		self.status_text.see(tk.END)
-		self.status_text.config(state=tk.DISABLED)
+        self.setLayout(main_layout)
 
-	def start_search(self):
-		query = self.search_entry.get().strip()
-		if not query:
-			messagebox.showerror("Error", "Please enter a search term.")
-			return
-		self.write_status(f"Searching YouTube for: {query}")
-		threading.Thread(target=self.search_youtube, args=(query,), daemon=True).start()
+    def set_cancel_enabled(self, enabled: bool):
+        self.cancel_btn.setEnabled(enabled)
 
-	def search_youtube(self, query):
-		ydl_opts = {
-			'quiet': True,
-			'extract_flat': True,
-			'skip_download': True,
-		}
-		try:
-			with YoutubeDL(ydl_opts) as ydl:
-				info = ydl.extract_info(f"ytsearch5:{query}", download=False)
-			self.search_results = info['entries']
-			self.results_listbox.delete(0, tk.END)
-			for i, entry in enumerate(self.search_results):
-				title = entry.get('title', 'Unknown')
-				channel = entry.get('uploader', 'Unknown')
-				duration = entry.get('duration', 0)
-				views = entry.get('view_count', 0)
-				self.results_listbox.insert(tk.END, f"{i+1}. {title} | {channel} | {duration}s | {views} views")
-			self.write_status("Search complete. Select a result to enable actions.")
-		except Exception as e:
-			self.write_status(f"Search error: {str(e)}")
+    def write_status(self, msg: str):
+        self.status_text.append(msg)
 
-	def on_result_select(self, event):
-		selection = self.results_listbox.curselection()
-		if selection:
-			self.listen_btn.config(state=tk.NORMAL)
-			self.download_audio_btn.config(state=tk.NORMAL)
-			self.download_video_btn.config(state=tk.NORMAL)
-		else:
-			self.listen_btn.config(state=tk.DISABLED)
-			self.download_audio_btn.config(state=tk.DISABLED)
-			self.download_video_btn.config(state=tk.DISABLED)
+    def choose_dir(self):
+        d = QFileDialog.getExistingDirectory(self, "Select Output Directory", self.output_dir)
+        if d:
+            self.output_dir = d
+            self.dir_label.setText(self.output_dir)
 
-	def get_selected_url(self):
-		selection = self.results_listbox.curselection()
-		if selection:
-			idx = selection[0]
-			return self.search_results[idx]['url']
-		return None
+    def start_search(self):
+        q = self.search_entry.text().strip()
+        if not q:
+            self.status_signal.emit("Error: Please enter a search term.")
+            return
+        self.status_signal.emit(f"Searching YouTube for: {q}")
+        threading.Thread(target=self.search_youtube, args=(q,), daemon=True).start()
 
-	def listen_audio(self):
-		url = self.get_selected_url()
-		if not url:
-			return
-		self.write_status("Streaming audio...")
-		threading.Thread(target=self.stream_audio, args=(url,), daemon=True).start()
+    def search_youtube(self, query: str):
+        opts = {'quiet': True, 'extract_flat': True, 'skip_download': True}
+        try:
+            with YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(f"ytsearch5:{query}", download=False)
+            entries = info.get('entries') if info else []
+            self.search_results_signal.emit(entries or [])
+            self.status_signal.emit("Search complete.")
+        except Exception as e:
+            self.status_signal.emit(f"Search error: {e}")
 
-	def stream_audio(self, url):
-		# Use ffplay to stream audio
-		try:
-			cmd = ["ffplay", "-nodisp", "-autoexit", url]
-			subprocess.run(cmd)
-			self.write_status("Audio playback finished.")
-		except Exception as e:
-			self.write_status(f"Audio playback error: {str(e)}")
+    def update_search_results(self, entries: list):
+        self.search_results = entries or []
+        self.results_listbox.clear()
+        for i, e in enumerate(self.search_results):
+            title = e.get('title', 'Unknown')
+            uploader = e.get('uploader') or e.get('uploader_name', 'Unknown')
+            duration = e.get('duration', 0)
+            views = e.get('view_count', 0)
+            item = QListWidgetItem(f"{i+1}. {title} | {uploader} | {duration}s | {views} views")
+            self.results_listbox.addItem(item)
 
-	def download_audio(self):
-		url = self.get_selected_url()
-		if not url:
-			return
-		self.write_status("Starting audio download...")
-		self.cancel_download = False
-		self.cancel_btn.config(state=tk.NORMAL)
-		self.download_thread = threading.Thread(target=self.download_mp3, args=(url,), daemon=True)
-		self.download_thread.start()
+    def on_result_select(self):
+        sel = self.results_listbox.selectedItems()
+        enabled = bool(sel)
+        self.listen_btn.setEnabled(enabled)
+        self.download_audio_btn.setEnabled(enabled)
+        self.download_video_btn.setEnabled(enabled)
+        self.stop_btn.setEnabled(False)
 
-	def download_video(self):
-		url = self.get_selected_url()
-		if not url:
-			return
-		self.write_status("Starting video download...")
-		self.cancel_download = False
-		self.cancel_btn.config(state=tk.NORMAL)
-		self.download_thread = threading.Thread(target=self.download_mp4, args=(url,), daemon=True)
-		self.download_thread.start()
+    def get_selected_url(self):
+        sel = self.results_listbox.selectedItems()
+        if not sel:
+            return None
+        idx = self.results_listbox.row(sel[0])
+        entry = self.search_results[idx]
+        return entry.get('url') or entry.get('webpage_url') or (f"https://www.youtube.com/watch?v={entry.get('id')}" if entry.get('id') else None)
 
-	def cancel_current(self):
-		self.cancel_download = True
-		self.write_status("Cancelling download...")
+    def listen_audio(self):
+        url = self.get_selected_url()
+        if not url:
+            return
+        self.status_signal.emit("Streaming audio...")
+        self.stop_btn.setEnabled(True)
+        threading.Thread(target=self.stream_audio, args=(url,), daemon=True).start()
 
-	def download_mp3(self, url):
-		import time
-		time.sleep(1.5)
+    def stream_audio(self, url: str):
+        try:
+            # Use yt-dlp to extract direct audio stream URL
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'quiet': True,
+                'skip_download': True,
+            }
+            with YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+            # Get direct audio URL
+            stream_url = None
+            if info:
+                if 'url' in info:
+                    stream_url = info['url']
+                elif 'formats' in info and info['formats']:
+                    # Pick best audio format
+                    for f in info['formats']:
+                        if f.get('acodec') != 'none' and f.get('vcodec') == 'none':
+                            stream_url = f.get('url')
+                            break
+            if not stream_url:
+                self.status_signal.emit("Error: Could not extract audio stream URL.")
+                self.stop_btn.setEnabled(False)
+                return
+            self.audio_proc = subprocess.Popen(["ffplay", "-nodisp", "-autoexit", stream_url])
+            self.audio_proc.wait()
+            self.audio_proc = None
+            self.status_signal.emit("Audio playback finished.")
+            self.stop_btn.setEnabled(False)
+        except Exception as e:
+            self.status_signal.emit(f"Audio playback error: {e}")
+            self.stop_btn.setEnabled(False)
 
-		def status_callback(msg):
-			self.write_status(msg)
+    def stop_audio(self):
+        if self.audio_proc and self.audio_proc.poll() is None:
+            self.audio_proc.terminate()
+            self.status_signal.emit("Audio playback stopped.")
+        self.stop_btn.setEnabled(False)
 
-		class Logger:
-			def __init__(self, callback):
-				self.callback = callback
-			def debug(self, msg):
-				pass
-			def warning(self, msg):
-				self.callback("Warning: " + msg)
-			def error(self, msg):
-				self.callback("Error: " + msg)
+    def download_audio(self):
+        url = self.get_selected_url()
+        if not url:
+            return
+        self.status_signal.emit("Starting audio download...")
+        self.cancel_download = False
+        self.cancel_enable_signal.emit(True)
+        self.download_thread = threading.Thread(target=self.download_mp3, args=(url,), daemon=True)
+        self.download_thread.start()
 
-		def hook(d):
-			if self.cancel_download:
-				raise Exception("Download cancelled by user.")
-			if d['status'] == 'downloading':
-				percent = d.get('downloaded_bytes', 0) / max(d.get('total_bytes', 1), 1) * 100
-				self.write_status(f"Downloading: {percent:.2f}%")
-			elif d['status'] == 'finished':
-				self.write_status("Download complete. Converting to Mp3...")
+    def download_video(self):
+        url = self.get_selected_url()
+        if not url:
+            return
+        self.status_signal.emit("Starting video download...")
+        self.cancel_download = False
+        self.cancel_enable_signal.emit(True)
+        self.download_thread = threading.Thread(target=self.download_mp4, args=(url,), daemon=True)
+        self.download_thread.start()
 
-		ydl_opts = {
-			'format': 'bestaudio/best',
-			'outtmpl': os.path.join(self.output_dir, '%(title)s.%(ext)s'),
-			'postprocessors': [{
-				'key': 'FFmpegExtractAudio',
-				'preferredcodec': 'mp3',
-				'preferredquality': '192',
-			}],
-			'logger': Logger(status_callback),
-			'progress_hooks': [hook],
-			'quiet': True,
-		}
-		try:
-			with YoutubeDL(ydl_opts) as ydl:
-				ydl.download([url])
-			self.write_status("Done! Mp3 saved to: " + self.output_dir)
-		except Exception as e:
-			self.write_status(f"Error: {str(e)}")
-			messagebox.showerror("Download Error", str(e))
-		finally:
-			self.cancel_btn.config(state=tk.DISABLED)
+    def cancel_current(self):
+        self.cancel_download = True
+        self.status_signal.emit("Cancelling download...")
 
-	def download_mp4(self, url):
-		import time
-		time.sleep(1.5)
+    def download_mp3(self, url: str):
+        def hook(d):
+            if self.cancel_download:
+                raise Exception("Download cancelled by user.")
+            status = d.get('status')
+            if status == 'downloading':
+                total = d.get('total_bytes') or d.get('total_bytes_estimate') or 1
+                percent = (d.get('downloaded_bytes', 0) / max(total, 1)) * 100
+                self.status_signal.emit(f"Downloading: {percent:.2f}%")
+            elif status == 'finished':
+                self.status_signal.emit("Download finished.")
 
-		def status_callback(msg):
-			self.write_status(msg)
+        opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': os.path.join(self.output_dir, '%(title)s.%(ext)s'),
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'progress_hooks': [hook],
+            'quiet': True,
+        }
+        try:
+            with YoutubeDL(opts) as ydl:
+                ydl.download([url])
+            self.status_signal.emit("Done! Mp3 saved to: " + self.output_dir)
+        except Exception as e:
+            self.status_signal.emit(f"Error: {e}")
+        finally:
+            self.cancel_enable_signal.emit(False)
 
-		class Logger:
-			def __init__(self, callback):
-				self.callback = callback
-			def debug(self, msg):
-				pass
-			def warning(self, msg):
-				self.callback("Warning: " + msg)
-			def error(self, msg):
-				self.callback("Error: " + msg)
+    def download_mp4(self, url: str):
+        def hook(d):
+            if self.cancel_download:
+                raise Exception("Download cancelled by user.")
+            status = d.get('status')
+            if status == 'downloading':
+                total = d.get('total_bytes') or d.get('total_bytes_estimate') or 1
+                percent = (d.get('downloaded_bytes', 0) / max(total, 1)) * 100
+                self.status_signal.emit(f"Downloading: {percent:.2f}%")
+            elif status == 'finished':
+                self.status_signal.emit("Download finished.")
 
-		def hook(d):
-			if self.cancel_download:
-				raise Exception("Download cancelled by user.")
-			if d['status'] == 'downloading':
-				percent = d.get('downloaded_bytes', 0) / max(d.get('total_bytes', 1), 1) * 100
-				self.write_status(f"Downloading: {percent:.2f}%")
-			elif d['status'] == 'finished':
-				self.write_status("Download complete.")
-
-		ydl_opts = {
-			'format': 'bestvideo+bestaudio/best',
-			'outtmpl': os.path.join(self.output_dir, '%(title)s.%(ext)s'),
-			'logger': Logger(status_callback),
-			'progress_hooks': [hook],
-			'quiet': True,
-		}
-		try:
-			with YoutubeDL(ydl_opts) as ydl:
-				ydl.download([url])
-			self.write_status("Done! Video saved to: " + self.output_dir)
-		except Exception as e:
-			self.write_status(f"Error: {str(e)}")
-			messagebox.showerror("Download Error", str(e))
-		finally:
-			self.cancel_btn.config(state=tk.DISABLED)
+        opts = {
+            'format': 'bestvideo+bestaudio/best',
+            'outtmpl': os.path.join(self.output_dir, '%(title)s.%(ext)s'),
+            'progress_hooks': [hook],
+            'quiet': True,
+        }
+        try:
+            with YoutubeDL(opts) as ydl:
+                ydl.download([url])
+            self.status_signal.emit("Done! Video saved to: " + self.output_dir)
+        except Exception as e:
+            self.status_signal.emit(f"Error: {e}")
+        finally:
+            self.cancel_enable_signal.emit(False)
 
 def main():
-	root = tk.Tk()
-	app = GetTunesApp(root)
-	root.mainloop()
+    app = QApplication(sys.argv)
+    window = GetTunesApp()
+    window.show()
+    sys.exit(app.exec())
 
 if __name__ == "__main__":
-	main()
-
-
-
-
+    main()
